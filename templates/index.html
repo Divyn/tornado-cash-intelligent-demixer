@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tornado Cash Analyzer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🌪️ Tornado Cash Transaction Match Finder - Intelligence Tool</h1>
+            <p class="subtitle">Track and analyze Tornado Cash transactions</p>
+        </header>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="network">Network:</label>
+                <select id="network">
+                    <option value="eth">Ethereum Mainnet</option>
+                    <!-- <option value="matic">Polygon</option>
+                    <option value="bsc">Binance Smart Chain</option> -->
+                </select>
+            </div>
+            <div class="control-group">
+                <label for="limit">Limit:</label>
+                <input type="number" id="limit" value="100" min="1" max="1000">
+            </div>
+            <div class="control-group">
+                <label for="startDate">Start Date:</label>
+                <input type="date" id="startDate">
+            </div>
+            <div class="control-group">
+                <label for="endDate">End Date:</label>
+                <input type="date" id="endDate">
+            </div>
+            <button id="fetchBtn" class="btn-primary">Fetch Data</button>
+        </div>
+
+        <div id="loading" class="loading hidden">
+            <div class="spinner"></div>
+            <p>Fetching data from Bitquery...</p>
+        </div>
+
+        <div id="error" class="error hidden"></div>
+
+        <div id="summary" class="summary hidden">
+            <h2>Summary</h2>
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-value" id="totalDeposits">0</div>
+                    <div class="stat-label">Total Deposits</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="totalWithdrawals">0</div>
+                    <div class="stat-label">Total Withdrawals</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tabs" class="tabs hidden">
+            <button class="tab-btn active" data-tab="analysis">Analysis</button>
+            <button class="tab-btn" data-tab="deposits">Deposits</button>
+            <button class="tab-btn" data-tab="withdrawals">Withdrawals</button>
+        </div>
+
+        <div id="analysis" class="tab-content active">
+            <div class="analysis-section">
+                <div class="section-header">
+                    <h3>
+                        De-Mixer: Matched Deposit-Withdrawal Pairs
+                        <span class="info-icon">
+                            ?
+                            <span class="info-tooltip">
+                                <strong>De-Mixing Intelligence</strong>
+                                Uses timing heuristics to match deposits with potential withdrawals. This analysis breaks privacy by linking deposits to withdrawals, revealing who sent funds and who received them. Time differences between deposits and withdrawals help identify potential connections.
+                            </span>
+                        </span>
+                    </h3>
+                    <div class="section-actions">
+                        <button id="downloadMatchedPairsCsv" class="btn-primary">Get CSV</button>
+                    </div>
+                </div>
+                <div id="matchedPairsLoading" class="widget-loading hidden">
+                    <div class="spinner-small"></div>
+                    <span>Analyzing matched pairs...</span>
+                </div>
+                <div id="matchedPairs" class="analysis-content"></div>
+            </div>
+            <div class="analysis-section">
+                <h3>
+                    Address Reuse Detection
+                    <span class="info-icon">
+                        ?
+                        <span class="info-tooltip">
+                            <strong>Privacy Compromise Detection</strong>
+                            Flags addresses appearing in multiple transactions. Address reuse is a privacy risk indicator - users should use fresh addresses for each transaction. Reused addresses can be linked together, breaking anonymity.
+                        </span>
+                    </span>
+                </h3>
+                <div id="reusedAddressesLoading" class="widget-loading hidden">
+                    <div class="spinner-small"></div>
+                    <span>Detecting address reuse...</span>
+                </div>
+                <div id="reusedAddresses" class="analysis-content"></div>
+            </div>
+            <div class="analysis-section">
+                <h3>
+                    Relayer Analysis
+                    <span class="info-icon">
+                        ?
+                        <span class="info-tooltip">
+                            <strong>Relayer Intelligence</strong>
+                            Identifies relayers (third parties that pay gas fees for withdrawals), analyzes fee structures, and maps recipient patterns. Relayers can reveal connections between transactions and help identify coordinated activities or services.
+                        </span>
+                    </span>
+                </h3>
+                <div id="relayerAnalysisLoading" class="widget-loading hidden">
+                    <div class="spinner-small"></div>
+                    <span>Analyzing relayers...</span>
+                </div>
+                <div id="relayerAnalysis" class="analysis-content"></div>
+            </div>
+            <div class="analysis-section">
+                <h3>
+                    Nullifier Analysis
+                    <span class="info-icon">
+                        ?
+                        <span class="info-tooltip">
+                            <strong>Double-Spend Detection</strong>
+                            Tracks nullifiers (cryptographic proofs that prevent double-spending) to detect potential double-spends or withdrawal patterns. Each withdrawal should have a unique nullifier. Duplicate nullifiers indicate potential double-spend attempts or errors.
+                        </span>
+                    </span>
+                </h3>
+                <div id="nullifierAnalysisLoading" class="widget-loading hidden">
+                    <div class="spinner-small"></div>
+                    <span>Analyzing nullifiers...</span>
+                </div>
+                <div id="nullifierAnalysis" class="analysis-content"></div>
+            </div>
+            <div class="analysis-section">
+                <h3>
+                    Coordiated Activity: Timestamp Analysis
+                    <span class="info-icon">
+                        ?
+                        <span class="info-tooltip">
+                            <strong>Behavioral Fingerprinting</strong>
+                            Analyzes daily/hourly activity patterns and identifies clustering. Timing patterns reveal behavioral fingerprints that help attribute transactions to specific actors or entities. Scheduled activities and timing anomalies can indicate automated systems or coordinated behavior.
+                        </span>
+                    </span>
+                </h3>
+                <div id="timestampAnalysisLoading" class="widget-loading hidden">
+                    <div class="spinner-small"></div>
+                    <span>Analyzing timestamps...</span>
+                </div>
+                <div id="timestampAnalysis" class="analysis-content"></div>
+            </div>
+        </div>
+
+        <div id="deposits" class="tab-content">
+            <div id="depositsLoading" class="loading hidden">
+                <div class="spinner"></div>
+                <p>Loading deposits...</p>
+            </div>
+            <div class="table-container">
+                <table id="depositsTable">
+                    <thead>
+                        <tr>
+                            <th>Tx Hash</th>
+                            <th>From</th>
+                            <th>To</th>
+                            <th>Pool</th>
+                            <th>Time</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="withdrawals" class="tab-content">
+            <div id="withdrawalsLoading" class="loading hidden">
+                <div class="spinner"></div>
+                <p>Loading withdrawals...</p>
+            </div>
+            <div class="table-container">
+                <table id="withdrawalsTable">
+                    <thead>
+                        <tr>
+                            <th>Tx Hash</th>
+                            <th>From</th>
+                            <th>Recipient</th>
+                            <th>Pool</th>
+                            <th>Time</th>
+                            
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const fetchBtn = document.getElementById('fetchBtn');
+        const downloadMatchedPairsBtn = document.getElementById('downloadMatchedPairsCsv');
+        const loading = document.getElementById('loading');
+        const error = document.getElementById('error');
+        const summary = document.getElementById('summary');
+        const tabs = document.getElementById('tabs');
+        const depositsLoading = document.getElementById('depositsLoading');
+        const withdrawalsLoading = document.getElementById('withdrawalsLoading');
+
+        // Cache configuration (5 minutes in milliseconds)
+        const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+        const CACHE_PREFIX = 'tornado_cash_section_';
+        const SECTIONS = {
+            summary: 'summary',
+            deposits: 'deposits',
+            withdrawals: 'withdrawals',
+            relayerNullifier: 'relayer_nullifier',
+        };
+
+        let currentNetwork = document.getElementById('network').value;
+        let currentLimit = parseInt(document.getElementById('limit').value);
+        let currentStartDate = document.getElementById('startDate').value || null;
+        let currentEndDate = document.getElementById('endDate').value || null;
+        const loadedFlags = {
+            summary: false,
+            deposits: false,
+            withdrawals: false,
+            relayerNullifier: false,
+        };
+
+        function getCacheKey(section, network, limit, startDate, endDate) {
+            const dateKey = `${startDate || 'none'}_${endDate || 'none'}`;
+            return `${CACHE_PREFIX}${section}_${network}_${limit}_${dateKey}`;
+        }
+
+        function getCachedSection(section, network, limit, startDate, endDate) {
+            const cacheKey = getCacheKey(section, network, limit, startDate, endDate);
+            const cached = localStorage.getItem(cacheKey);
+            if (!cached) return null;
+            try {
+                const parsed = JSON.parse(cached);
+                const age = Date.now() - parsed.timestamp;
+                if (age > CACHE_DURATION) {
+                    localStorage.removeItem(cacheKey);
+                    return null;
+                }
+                return { data: parsed.data, age };
+            } catch (e) {
+                localStorage.removeItem(cacheKey);
+                return null;
+            }
+        }
+
+        function setCachedSection(section, network, limit, startDate, endDate, data) {
+            const cacheKey = getCacheKey(section, network, limit, startDate, endDate);
+            const cacheEntry = { data, timestamp: Date.now() };
+            try {
+                localStorage.setItem(cacheKey, JSON.stringify(cacheEntry));
+            } catch (e) {
+                clearExpiredCache();
+            }
+        }
+
+        function clearExpiredCache() {
+            const now = Date.now();
+            const keysToRemove = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.startsWith(CACHE_PREFIX)) {
+                    try {
+                        const cached = JSON.parse(localStorage.getItem(key));
+                        if (now - cached.timestamp > CACHE_DURATION) {
+                            keysToRemove.push(key);
+                        }
+                    } catch (e) {
+                        keysToRemove.push(key);
+                    }
+                }
+            }
+            keysToRemove.forEach(key => localStorage.removeItem(key));
+        }
+
+        function resetSectionState() {
+            loadedFlags.summary = false;
+            loadedFlags.deposits = false;
+            loadedFlags.withdrawals = false;
+            loadedFlags.relayerNullifier = false;
+            document.querySelector('#depositsTable tbody').innerHTML = '';
+            document.querySelector('#withdrawalsTable tbody').innerHTML = '';
+            summary.classList.add('hidden');
+            // Clear widget content
+            document.getElementById('matchedPairs').innerHTML = '';
+            document.getElementById('reusedAddresses').innerHTML = '';
+            document.getElementById('relayerAnalysis').innerHTML = '';
+            document.getElementById('nullifierAnalysis').innerHTML = '';
+            document.getElementById('timestampAnalysis').innerHTML = '';
+        }
+
+        function openMatchedPairsCsv() {
+            const params = new URLSearchParams({
+                network: currentNetwork,
+                limit: currentLimit,
+            });
+            if (currentStartDate) {
+                params.append('start_date', currentStartDate);
+            }
+            if (currentEndDate) {
+                params.append('end_date', currentEndDate);
+            }
+            window.open(`/api/matched-pairs.csv?${params.toString()}`, '_blank');
+        }
+
+        function setSectionLoading(section, isLoading) {
+            const target = section === SECTIONS.deposits ? depositsLoading : withdrawalsLoading;
+            if (!target) return;
+            if (isLoading) {
+                target.classList.remove('hidden');
+            } else {
+                target.classList.add('hidden');
+            }
+        }
+
+        function setCombinedCache(data, network, limit, startDate, endDate) {
+            // Cache all sections together so tabs don't refetch
+            setCachedSection(SECTIONS.summary, network, limit, startDate, endDate, {
+                analysis: data.analysis,
+                summary: data.summary,
+            });
+            setCachedSection(SECTIONS.deposits, network, limit, startDate, endDate, {
+                deposits: data.deposits || [],
+            });
+            setCachedSection(SECTIONS.withdrawals, network, limit, startDate, endDate, {
+                withdrawals: data.withdrawals || [],
+            });
+        }
+
+        function setWidgetLoading(widgetId, isLoading) {
+            const loadingEl = document.getElementById(widgetId + 'Loading');
+            if (loadingEl) {
+                if (isLoading) {
+                    loadingEl.classList.remove('hidden');
+                } else {
+                    loadingEl.classList.add('hidden');
+                }
+            }
+        }
+
+        function displaySummary(counts) {
+            document.getElementById('totalDeposits').textContent = counts?.total_deposits || 0;
+            document.getElementById('totalWithdrawals').textContent = counts?.total_withdrawals || 0;
+            summary.classList.remove('hidden');
+            tabs.classList.remove('hidden');
+        }
+
+        async function loadRelayerNullifierAnalysis(force = false) {
+            const cached = !force ? getCachedSection(SECTIONS.relayerNullifier, currentNetwork, currentLimit, currentStartDate, currentEndDate) : null;
+            if (cached) {
+                const { relayer_analysis, nullifier_analysis } = cached.data || {};
+                if (relayer_analysis !== undefined) {
+                    renderRelayerAnalysis(relayer_analysis, currentNetwork);
+                    setWidgetLoading('relayerAnalysis', false);
+                }
+                if (nullifier_analysis !== undefined) {
+                    renderNullifierAnalysis(nullifier_analysis);
+                    setWidgetLoading('nullifierAnalysis', false);
+                }
+                loadedFlags.relayerNullifier = true;
+                return;
+            }
+
+            setWidgetLoading('relayerAnalysis', true);
+            setWidgetLoading('nullifierAnalysis', true);
+
+            try {
+                const requestBody = { 
+                    limit: currentLimit, 
+                    network: currentNetwork 
+                };
+                if (currentStartDate) {
+                    requestBody.start_date = currentStartDate;
+                }
+                if (currentEndDate) {
+                    requestBody.end_date = currentEndDate;
+                }
+
+                const response = await fetch('/api/relayer-nullifier-analysis', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody),
+                });
+                const data = await response.json();
+                if (!data.success) throw new Error(data.error || 'Unknown error');
+
+                renderRelayerAnalysis(data.relayer_analysis, currentNetwork);
+                renderNullifierAnalysis(data.nullifier_analysis);
+                setWidgetLoading('relayerAnalysis', false);
+                setWidgetLoading('nullifierAnalysis', false);
+                setCachedSection(SECTIONS.relayerNullifier, currentNetwork, currentLimit, currentStartDate, currentEndDate, data);
+                loadedFlags.relayerNullifier = true;
+            } catch (err) {
+                error.textContent = `Error loading relayer/nullifier analysis: ${err.message}`;
+                error.classList.remove('hidden');
+                setWidgetLoading('relayerAnalysis', false);
+                setWidgetLoading('nullifierAnalysis', false);
+            }
+        }
+
+        async function loadSummary(force = false) {
+            const cached = !force ? getCachedSection(SECTIONS.summary, currentNetwork, currentLimit, currentStartDate, currentEndDate) : null;
+            if (cached) {
+                displaySummary(cached.data.summary);
+                populateAnalysis(cached.data.analysis, currentNetwork);
+                loadedFlags.summary = true;
+                loadRelayerNullifierAnalysis();
+                return;
+            }
+
+            loading.classList.remove('hidden');
+            error.classList.add('hidden');
+
+            // Show loading for fast widgets; relayer/nullifier handled separately
+            ['matchedPairs', 'reusedAddresses', 'timestampAnalysis'].forEach(widget => {
+                setWidgetLoading(widget, true);
+            });
+
+            try {
+                // Use the combined endpoint so we fetch deposits/withdrawals once
+                const requestBody = { 
+                    limit: currentLimit, 
+                    network: currentNetwork 
+                };
+                if (currentStartDate) {
+                    requestBody.start_date = currentStartDate;
+                }
+                if (currentEndDate) {
+                    requestBody.end_date = currentEndDate;
+                }
+                
+                const response = await fetch('/api/fetch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody),
+                });
+                const data = await response.json();
+                if (!data.success) throw new Error(data.error || 'Unknown error');
+                
+                // Cache all sections from the single response
+                setCombinedCache(data, currentNetwork, currentLimit, currentStartDate, currentEndDate);
+                
+                // Display summary immediately
+                displaySummary(data.summary);
+                
+                // Render widgets progressively as data becomes available
+                // Fast widgets (computed from deposits/withdrawals) render immediately
+                if (data.analysis) {
+                    // Render fast widgets first
+                    if (data.analysis.matched_pairs !== undefined) {
+                        renderMatchedPairs(data.analysis.matched_pairs, currentNetwork);
+                        setWidgetLoading('matchedPairs', false);
+                    }
+                    
+                    if (data.analysis.reused_addresses !== undefined) {
+                        renderReusedAddresses(data.analysis.reused_addresses, currentNetwork);
+                        setWidgetLoading('reusedAddresses', false);
+                    }
+                    
+                    if (data.analysis.deposit_timestamps !== undefined || data.analysis.withdrawal_timestamps !== undefined) {
+                        renderTimestampAnalysis(data.analysis.deposit_timestamps, data.analysis.withdrawal_timestamps);
+                        setWidgetLoading('timestampAnalysis', false);
+                    }
+                    
+                }
+
+                // Kick off relayer/nullifier analysis separately so main fetch stays fast
+                loadRelayerNullifierAnalysis();
+
+                loadedFlags.summary = true;
+            } catch (err) {
+                error.textContent = `Error: ${err.message}`;
+                error.classList.remove('hidden');
+                // Hide all widget loaders on error
+                ['matchedPairs', 'reusedAddresses', 'timestampAnalysis', 'relayerAnalysis', 'nullifierAnalysis'].forEach(widget => {
+                    setWidgetLoading(widget, false);
+                });
+            } finally {
+                loading.classList.add('hidden');
+            }
+        }
+
+        async function loadDeposits(force = false) {
+            const cached = !force ? getCachedSection(SECTIONS.deposits, currentNetwork, currentLimit, currentStartDate, currentEndDate) : null;
+            if (cached) {
+                populateDepositsTable(cached.data.deposits, currentNetwork);
+                loadedFlags.deposits = true;
+                return;
+            }
+
+            setSectionLoading(SECTIONS.deposits, true);
+            try {
+                const requestBody = { 
+                    limit: currentLimit, 
+                    network: currentNetwork 
+                };
+                if (currentStartDate) {
+                    requestBody.start_date = currentStartDate;
+                }
+                if (currentEndDate) {
+                    requestBody.end_date = currentEndDate;
+                }
+                
+                const response = await fetch('/api/deposits', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody),
+                });
+                const data = await response.json();
+                if (!data.success) throw new Error(data.error || 'Unknown error');
+                setCachedSection(SECTIONS.deposits, currentNetwork, currentLimit, currentStartDate, currentEndDate, data);
+                populateDepositsTable(data.deposits, currentNetwork);
+                loadedFlags.deposits = true;
+            } catch (err) {
+                error.textContent = `Error loading deposits: ${err.message}`;
+                error.classList.remove('hidden');
+            } finally {
+                setSectionLoading(SECTIONS.deposits, false);
+            }
+        }
+
+        async function loadWithdrawals(force = false) {
+            const cached = !force ? getCachedSection(SECTIONS.withdrawals, currentNetwork, currentLimit, currentStartDate, currentEndDate) : null;
+            if (cached) {
+                populateWithdrawalsTable(cached.data.withdrawals, currentNetwork);
+                loadedFlags.withdrawals = true;
+                return;
+            }
+
+            setSectionLoading(SECTIONS.withdrawals, true);
+            try {
+                const requestBody = { 
+                    limit: currentLimit, 
+                    network: currentNetwork 
+                };
+                if (currentStartDate) {
+                    requestBody.start_date = currentStartDate;
+                }
+                if (currentEndDate) {
+                    requestBody.end_date = currentEndDate;
+                }
+                
+                const response = await fetch('/api/withdrawals', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody),
+                });
+                const data = await response.json();
+                if (!data.success) throw new Error(data.error || 'Unknown error');
+                setCachedSection(SECTIONS.withdrawals, currentNetwork, currentLimit, currentStartDate, currentEndDate, data);
+                populateWithdrawalsTable(data.withdrawals, currentNetwork);
+                loadedFlags.withdrawals = true;
+            } catch (err) {
+                error.textContent = `Error loading withdrawals: ${err.message}`;
+                error.classList.remove('hidden');
+            } finally {
+                setSectionLoading(SECTIONS.withdrawals, false);
+            }
+        }
+
+        // Update current values when inputs change (but don't fetch data)
+        document.getElementById('network').addEventListener('change', () => {
+            currentNetwork = document.getElementById('network').value;
+            resetSectionState();
+        });
+        document.getElementById('limit').addEventListener('change', () => {
+            currentLimit = parseInt(document.getElementById('limit').value);
+            resetSectionState();
+        });
+        document.getElementById('startDate').addEventListener('change', () => {
+            currentStartDate = document.getElementById('startDate').value || null;
+            resetSectionState();
+        });
+        document.getElementById('endDate').addEventListener('change', () => {
+            currentEndDate = document.getElementById('endDate').value || null;
+            resetSectionState();
+        });
+
+        if (downloadMatchedPairsBtn) {
+            downloadMatchedPairsBtn.addEventListener('click', openMatchedPairsCsv);
+        }
+
+        // Tab switching with lazy loading
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const tabName = btn.dataset.tab;
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById(tabName).classList.add('active');
+
+                // Lazy load data when tab is opened
+                if (tabName === 'deposits' && !loadedFlags.deposits) {
+                    await loadDeposits();
+                } else if (tabName === 'withdrawals' && !loadedFlags.withdrawals) {
+                    await loadWithdrawals();
+                }
+            });
+        });
+
+        fetchBtn.addEventListener('click', async () => {
+            currentNetwork = document.getElementById('network').value;
+            currentLimit = parseInt(document.getElementById('limit').value);
+            currentStartDate = document.getElementById('startDate').value || null;
+            currentEndDate = document.getElementById('endDate').value || null;
+            resetSectionState();
+            await loadSummary(true);
+        });
+
+        function getExplorerUrl(network) {
+            const explorers = {
+                'eth': 'https://etherscan.io',
+                'matic': 'https://polygonscan.com',
+                'bsc': 'https://bscscan.com'
+            };
+            return explorers[network] || explorers['eth'];
+        }
+
+        function populateDepositsTable(deposits, network = 'eth') {
+            const tbody = document.querySelector('#depositsTable tbody');
+            tbody.innerHTML = '';
+            const explorer = getExplorerUrl(network);
+            
+            deposits.forEach(tx => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><a href="${explorer}/tx/${tx.tx_hash}" target="_blank">${shortenHash(tx.tx_hash)}</a></td>
+                    <td><a href="${explorer}/address/${tx.from_address}" target="_blank">${shortenAddress(tx.from_address)}</a></td>
+                    <td><a href="${explorer}/address/${tx.to_address}" target="_blank">${shortenAddress(tx.to_address)}</a></td>
+                    <td>${tx.pool_denomination || 'Unknown'}</td>
+                    <td>${formatTime(tx.block_time)}</td>                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function populateWithdrawalsTable(withdrawals, network = 'eth') {
+            const tbody = document.querySelector('#withdrawalsTable tbody');
+            tbody.innerHTML = '';
+            const explorer = getExplorerUrl(network);
+            
+            withdrawals.forEach(tx => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><a href="${explorer}/tx/${tx.tx_hash}" target="_blank">${shortenHash(tx.tx_hash)}</a></td>
+                    <td><a href="${explorer}/address/${tx.from_address}" target="_blank">${shortenAddress(tx.from_address)}</a></td>
+                    <td><a href="${explorer}/address/${tx.recipient || tx.to_address}" target="_blank">${shortenAddress(tx.recipient || tx.to_address)}</a></td>
+                    <td>${tx.pool_denomination || 'Unknown'}</td>
+                    <td>${formatTime(tx.block_time)}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function renderMatchedPairs(matchedPairs, network = 'eth') {
+            const explorer = getExplorerUrl(network);
+            const matchedPairsDiv = document.getElementById('matchedPairs');
+            if (matchedPairs && matchedPairs.length > 0) {
+                matchedPairsDiv.innerHTML = `
+                    <p><strong>Found ${matchedPairs.length} potential matches:</strong></p>
+                    <table class="analysis-table">
+                        <thead>
+                            <tr>
+                                <th>Deposit Hash</th>
+                                <th>Deposit From</th>
+                                <th>Withdrawal Hash</th>
+                                <th>Withdrawal To</th>
+                                <th>Pool</th>
+                                <th>Time Diff (hours)</th>
+                                <th>
+                                    Match Quality
+                                    <span class="info-icon">
+                                        ?
+                                        <span class="info-tooltip">
+                                            <strong>Match Quality Calculation</strong>
+                                            Match quality is determined by multiple factors: <strong>Amount</strong> (exact amount match), <strong>Same Contract</strong> (same Tornado Cash contract address), and <strong>Same Pool</strong> (same pool denomination like 0.1 ETH, 1 ETH, etc.). The scoring algorithm considers time difference, amount difference, and applies penalties for different contracts (0.3) or different pools (0.5). Higher quality matches have more indicators present. If none are present, the match is based on timing only.
+                                        </span>
+                                    </span>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${matchedPairs.slice(0, 20).map(m => {
+                                const quality = [];
+                                if (m.amount_match) quality.push('Amount');
+                                if (m.same_contract) quality.push('Same Contract');
+                                if (m.same_pool) quality.push('Same Pool');
+                                const poolInfo = m.deposit_pool && m.withdrawal_pool && m.deposit_pool !== 'Unknown' 
+                                    ? `${m.deposit_pool} → ${m.withdrawal_pool}` 
+                                    : '-';
+                                return `
+                                <tr>
+                                    <td><a href="${explorer}/tx/${m.deposit_hash}" target="_blank">${shortenHash(m.deposit_hash)}</a></td>
+                                    <td><a href="${explorer}/address/${m.deposit_from}" target="_blank">${shortenAddress(m.deposit_from)}</a></td>
+                                    <td><a href="${explorer}/tx/${m.withdrawal_hash}" target="_blank">${shortenHash(m.withdrawal_hash)}</a></td>
+                                    <td><a href="${explorer}/address/${m.withdrawal_to}" target="_blank">${shortenAddress(m.withdrawal_to)}</a></td>
+                                    <td>${poolInfo}</td>
+                                    <td>${(m.time_diff_hours ?? m.time_diff_days * 24).toFixed(2)}</td>
+                                    <td>${quality.length > 0 ? quality.join(', ') : 'Time only'}</td>
+                                </tr>
+                            `}).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } else {
+                matchedPairsDiv.innerHTML = '<p>No matched pairs found.</p>';
+            }
+        }
+
+        function renderReusedAddresses(reusedAddresses, network = 'eth') {
+            const explorer = getExplorerUrl(network);
+            const reusedDiv = document.getElementById('reusedAddresses');
+            if (reusedAddresses && Object.keys(reusedAddresses).length > 0) {
+                const entries = Object.entries(reusedAddresses).slice(0, 20);
+                reusedDiv.innerHTML = `
+                    <p><strong>Found ${Object.keys(reusedAddresses).length} addresses with multiple transactions:</strong></p>
+                    <ul>
+                        ${entries.map(([addr, count]) => `
+                            <li><a href="${explorer}/address/${addr}" target="_blank">${shortenAddress(addr)}</a>: ${count} transactions</li>
+                        `).join('')}
+                    </ul>
+                `;
+            } else {
+                reusedDiv.innerHTML = '<p>No reused addresses found.</p>';
+            }
+        }
+
+        function renderRelayerAnalysis(relayerAnalysis, network = 'eth') {
+            const explorer = getExplorerUrl(network);
+            const relayerDiv = document.getElementById('relayerAnalysis');
+            if (relayerAnalysis && relayerAnalysis.relayer_counts) {
+                const relayers = Object.entries(relayerAnalysis.relayer_counts).slice(0, 10);
+                relayerDiv.innerHTML = `
+                    <p><strong>Total with relayers:</strong> ${relayerAnalysis.total_with_relayers || 0}</p>
+                    <p><strong>Unique relayers:</strong> ${relayerAnalysis.unique_relayers || 0}</p>
+                    <ul>
+                        ${relayers.map(([relayer, count]) => `
+                            <li><a href="${explorer}/address/${relayer}" target="_blank">${shortenAddress(relayer)}</a>: ${count} transactions</li>
+                        `).join('')}
+                    </ul>
+                `;
+            } else {
+                relayerDiv.innerHTML = '<p>No relayer data available.</p>';
+            }
+        }
+
+        function renderNullifierAnalysis(nullifierAnalysis) {
+            const nullifierDiv = document.getElementById('nullifierAnalysis');
+            if (nullifierAnalysis) {
+                const doubleSpends = nullifierAnalysis.potential_double_spends || {};
+                nullifierDiv.innerHTML = `
+                    <p><strong>Withdrawals with nullifiers:</strong> ${nullifierAnalysis.total_with_nullifiers || 0}</p>
+                    <p><strong>Unique nullifiers:</strong> ${nullifierAnalysis.unique_nullifiers || 0}</p>
+                    ${Object.keys(doubleSpends).length > 0 ? `
+                        <p class="warning"><strong>⚠️ WARNING:</strong> Found ${Object.keys(doubleSpends).length} potential double-spends!</p>
+                    ` : ''}
+                `;
+            } else {
+                nullifierDiv.innerHTML = '<p>No nullifier data available.</p>';
+            }
+        }
+
+        function renderTimestampAnalysis(depositTimestamps, withdrawalTimestamps) {
+            const timestampDiv = document.getElementById('timestampAnalysis');
+            const depositTs = depositTimestamps || {};
+            const withdrawalTs = withdrawalTimestamps || {};
+            timestampDiv.innerHTML = `
+                <div class="timestamp-info">
+                    <h4>Deposits</h4>
+                    <p>Total: ${depositTs.total_transactions || 0}</p>
+                    ${depositTs.most_active_day ? `<p>Most active day: ${depositTs.most_active_day[0]} (${depositTs.most_active_day[1]} transactions)</p>` : ''}
+                    ${depositTs.average_per_day ? `<p>Average per day: ${depositTs.average_per_day.toFixed(2)}</p>` : ''}
+                </div>
+                <div class="timestamp-info">
+                    <h4>Withdrawals</h4>
+                    <p>Total: ${withdrawalTs.total_transactions || 0}</p>
+                    ${withdrawalTs.most_active_day ? `<p>Most active day: ${withdrawalTs.most_active_day[0]} (${withdrawalTs.most_active_day[1]} transactions)</p>` : ''}
+                    ${withdrawalTs.average_per_day ? `<p>Average per day: ${withdrawalTs.average_per_day.toFixed(2)}</p>` : ''}
+                </div>
+            `;
+        }
+
+        function populateAnalysis(analysis, network = 'eth') {
+            // Render all widgets from cached data
+            if (analysis.matched_pairs !== undefined) {
+                renderMatchedPairs(analysis.matched_pairs, network);
+            }
+            if (analysis.reused_addresses !== undefined) {
+                renderReusedAddresses(analysis.reused_addresses, network);
+            }
+            if (analysis.relayer_analysis !== undefined) {
+                renderRelayerAnalysis(analysis.relayer_analysis, network);
+            }
+            if (analysis.nullifier_analysis !== undefined) {
+                renderNullifierAnalysis(analysis.nullifier_analysis);
+            }
+            if (analysis.deposit_timestamps !== undefined || analysis.withdrawal_timestamps !== undefined) {
+                renderTimestampAnalysis(analysis.deposit_timestamps, analysis.withdrawal_timestamps);
+            }
+        }
+
+        function shortenHash(hash) {
+            if (!hash) return '-';
+            return hash.substring(0, 10) + '...' + hash.substring(hash.length - 8);
+        }
+
+        function shortenAddress(addr) {
+            if (!addr) return '-';
+            return addr.substring(0, 6) + '...' + addr.substring(addr.length - 4);
+        }
+
+        function formatTime(timeStr) {
+            if (!timeStr) return '-';
+            const date = new Date(timeStr);
+            return date.toLocaleString();
+        }
+
+        // Data will only be fetched when the button is clicked
+    </script>
+</body>
+</html>
+
