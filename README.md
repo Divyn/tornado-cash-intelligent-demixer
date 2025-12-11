@@ -2,6 +2,8 @@
 
 A **de-mixing and attribution tool** for Tornado Cash transactions. This tool is purpose-built to match deposits to withdrawals, detecting behavioral patterns, and identifying network connections.
 
+## Final Output
+
 ## Features
 
 ### Core Analysis
@@ -19,7 +21,8 @@ A **de-mixing and attribution tool** for Tornado Cash transactions. This tool is
 - **Nullifier Analysis**: Detect potential double-spends and withdrawal patterns
 
 
-## Final Output
+
+#### How does the de-mixing work?
 
 
 
