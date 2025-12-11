@@ -4,6 +4,10 @@ A **de-mixing and attribution tool** for Tornado Cash transactions. This tool is
 
 ## Final Output
 
+![](/img/1.png)
+![](/img/2.png)
+![](/img/3.png)
+
 ## Features
 
 ### Core Analysis
